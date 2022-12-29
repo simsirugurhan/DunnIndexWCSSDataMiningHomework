@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -39,15 +40,11 @@ namespace DataMiningFinal
         private void button1_Click(object sender, EventArgs e)
         {
             // Load the data into a double[][] array
-            string[][] stringArray = File.ReadAllLines("Final-data.csv")
-                .Skip(1)
-                .Select(x => x.Split(','))
-                .ToArray();
-            double[][] array = stringArray.Select(x => x.Select(y => double.Parse(y)).ToArray()).ToArray();
+
+            double[][] array = LoadData("Final-data.csv", 214, 9, ',');
 
             // Normalize the data
-            int[] columns = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-            array = Normalize(array, columns);
+            array = Normalize(array);
 
             // Create the KMeans model
 
@@ -91,15 +88,30 @@ namespace DataMiningFinal
             using (StreamWriter writer = new StreamWriter("sonuc.txt"))
             {
                 // Add the cluster labels for each data point
+                int[] sumOfClusters = new int[numClusters];
+
                 writer.WriteLine("\nCluster labels:");
                 for (int i = 0; i < array.Length; i++)
                 {
                     writer.WriteLine($"Record: {i}: Cluster: {clusters.Decide(array[i])}");
+                    for (int k = 0; k < numClusters; k++)
+                    {
+                        if (clusters.Decide(array[i]) == k)
+                        {
+                            sumOfClusters[k]++;
+                        }
+                    }
                 }
 
-                writer.WriteLine($"WCSS: {wcss}");
-                writer.WriteLine($"BCSS: {bcss}");
-                writer.WriteLine($"Dunn index: {dunnIndex}");
+                writer.WriteLine($"WCSS: {wcss.ToString("F" + 5)}");
+                writer.WriteLine($"BCSS: {bcss.ToString("F" + 5)}");
+                writer.WriteLine($"Dunn index: {dunnIndex.ToString("F" + 5)}");
+
+                for (int k = 0; k < numClusters; k++)
+                {
+                    writer.WriteLine($"Küme {k}: {sumOfClusters[k]}");
+                }
+
             }
 
             // Ask the user if they want to visualize the data
@@ -112,7 +124,7 @@ namespace DataMiningFinal
             just click calculate button, after writing
 
              */
-            
+
             if (visualize == "y")
             {
                 // Ask the user which column to use for the x axis
@@ -137,24 +149,59 @@ namespace DataMiningFinal
                 myForm.Show();
             }
         }
-        
+
         // Normalize the data in the specified columns
-        static double[][] Normalize(double[][] data, int[] columns)
+        static double[][] Normalize(double[][] rawData)
         {
-            double[][] result = new double[data.Length][];
-            for (int i = 0; i < data.Length; i++)
+            double[][] result = new double[rawData.Length][];
+            for (int i = 0; i < rawData.Length; ++i)
             {
-                result[i] = new double[data[i].Length];
-                Array.Copy(data[i], result[i], data[i].Length);
+                result[i] = new double[rawData[i].Length];
+                Array.Copy(rawData[i], result[i], rawData[i].Length);
             }
 
-            for (int c = 0; c < columns.Length; c++)
+            for (int j = 0; j < result[0].Length; ++j) // each col
             {
-                double[] col = result.GetColumn(columns[c]);
-                col = col.Standardize();
-                result.SetColumn(columns[c], col);
+                double colSum = 0.0;
+                for (int i = 0; i < result.Length; ++i)
+                    colSum += result[i][j];
+                double mean = colSum / result.Length;
+                double sum = 0.0;
+                for (int i = 0; i < result.Length; ++i)
+                    sum += (result[i][j] - mean) * (result[i][j] - mean);
+                double sd = sum / result.Length;
+                for (int i = 0; i < result.Length; ++i)
+                    result[i][j] = (result[i][j] - mean) / sd;
             }
+            return result;
+        }
 
+        static double[][] MatrixDouble(int rows, int cols)
+        {
+            double[][] result = new double[rows][];
+            for (int i = 0; i < rows; ++i)
+                result[i] = new double[cols];
+            return result;
+        }
+
+        static double[][] LoadData(string fn, int rows, int cols, char delimit)
+        {
+            NumberFormatInfo provider = new NumberFormatInfo();
+            provider.NumberDecimalSeparator = ".";
+            double[][] result = MatrixDouble(rows, cols);
+            FileStream ifs = new FileStream(fn, FileMode.Open);
+            StreamReader sr = new StreamReader(ifs);
+            string[] tokens = null;
+            string line = null;
+            int i = 0;
+            while ((line = sr.ReadLine()) != null)
+            {
+                tokens = line.Split(delimit);
+                for (int j = 0; j < cols; ++j)
+                    result[i][j] = Convert.ToDouble(tokens[j], provider);
+                ++i;
+            }
+            sr.Close(); ifs.Close();
             return result;
         }
     }
